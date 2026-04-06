@@ -10,37 +10,41 @@ return new class extends Migration
     {
         Schema::create('attendance_logs', function (Blueprint $table) {
             $table->id();
-            // --- CHANGED THIS FROM intern_id TO user_id ---
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            
+            // Keeps the link to the interns table perfectly!
+            $table->foreignId('intern_id')->constrained()->onDelete('cascade');
             $table->date('date');
 
             // --- TIME IN ---
             $table->timestamp('time_in')->nullable();
             $table->timestamp('time_in_official')->nullable();
             $table->string('time_in_selfie')->nullable();
-            $table->decimal('time_in_lat', 10, 7)->nullable();
-            $table->decimal('time_in_lng', 10, 7)->nullable();
+            
+            // Renamed to match the AttendanceController and Model
+            $table->decimal('latitude_in', 10, 8)->nullable();
+            $table->decimal('longitude_in', 11, 8)->nullable();
+            
             $table->boolean('time_in_selfie_approved')->nullable();
 
             // --- LUNCH OUT ---
             $table->timestamp('lunch_out')->nullable();
             $table->string('lunch_out_selfie')->nullable();
-            $table->decimal('lunch_out_lat', 10, 7)->nullable();
-            $table->decimal('lunch_out_lng', 10, 7)->nullable();
+            $table->decimal('lunch_out_lat', 10, 8)->nullable(); 
+            $table->decimal('lunch_out_lng', 11, 8)->nullable(); 
             $table->boolean('lunch_out_selfie_approved')->nullable();
 
             // --- LUNCH IN ---
             $table->timestamp('lunch_in')->nullable();
             $table->string('lunch_in_selfie')->nullable();
-            $table->decimal('lunch_in_lat', 10, 7)->nullable();
-            $table->decimal('lunch_in_lng', 10, 7)->nullable();
+            $table->decimal('lunch_in_lat', 10, 8)->nullable();
+            $table->decimal('lunch_in_lng', 11, 8)->nullable();
             $table->boolean('lunch_in_selfie_approved')->nullable();
 
             // --- TIME OUT ---
             $table->timestamp('time_out')->nullable();
             $table->string('time_out_selfie')->nullable();
-            $table->decimal('time_out_lat', 10, 7)->nullable();
-            $table->decimal('time_out_lng', 10, 7)->nullable();
+            $table->decimal('time_out_lat', 10, 8)->nullable();
+            $table->decimal('time_out_lng', 11, 8)->nullable();
             $table->boolean('time_out_selfie_approved')->nullable();
 
             // --- Computed / Derived ---
@@ -66,8 +70,8 @@ return new class extends Migration
 
             $table->text('notes')->nullable();
 
-            // --- CHANGED THIS TO user_id ---
-            $table->unique(['user_id', 'date']); 
+            // Unique constraint prevents double Time-Ins on the same day
+            $table->unique(['intern_id', 'date']); 
 
             $table->timestamps();
         });

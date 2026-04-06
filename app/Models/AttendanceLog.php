@@ -15,6 +15,8 @@ class AttendanceLog extends Model
         'date', 
         'time_in', 
         'time_out', 
-        'status'
+        'status',
+        'latitude_in', 
+    'longitude_in'
     ];
 }

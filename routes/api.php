@@ -2,6 +2,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AttendanceController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\HrController;
 
 // PUBLIC ROUTES (No Token Needed)
 Route::group(['prefix' => 'auth'], function () {
@@ -13,9 +14,8 @@ Route::group(['prefix' => 'auth'], function () {
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me',      [AuthController::class, 'me']);
+    Route::get('/hr/interns', [HrController::class, 'getInternList']);
 
     // Attendance
-    Route::post('/attendance/time-in', [AttendanceController::class, 'timeIn']);
-    Route::post('/attendance/time-out', [AttendanceController::class, 'timeOut']);
-    Route::get('/attendance/status', [AttendanceController::class, 'checkStatus']); 
+    Route::post('/attendance/log', [AttendanceController::class, 'logAttendance']);
 });

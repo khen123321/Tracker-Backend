@@ -22,7 +22,7 @@ class UsersSeeder extends Seeder
                 'email'      => 'admin@climbs.com.ph',
                 'password'   => Hash::make('Admin@CLIMBS2024!'),
                 'role'       => 'admin',
-                'is_active'  => true,
+                'status'     => 'active', // <-- Changed this from is_active
             ],
             [
                 'last_name'  => 'Staff',
@@ -31,7 +31,7 @@ class UsersSeeder extends Seeder
                 'email'      => 'hr@climbs.com.ph',
                 'password'   => Hash::make('HR@CLIMBS2024!'),
                 'role'       => 'hr',
-                'is_active'  => true,
+                'status'     => 'active', // <-- Changed this from is_active
             ],
         ];
 
@@ -39,7 +39,6 @@ class UsersSeeder extends Seeder
             DB::table('users')->updateOrInsert(
                 ['email' => $user['email']],
                 array_merge($user, [
-                    'profile_photo' => null,
                     'created_at'    => now(),
                     'updated_at'    => now(),
                 ])

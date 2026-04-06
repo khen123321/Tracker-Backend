@@ -13,6 +13,10 @@ class Intern extends Model
     // Add any other columns your interns table has here (like 'school', 'hours_rendered', etc.)
     protected $fillable = [
         'user_id',
+        'school_id',
+        'department_id', // Add this if your DB requires it
+        'branch_id',
+        'course',
         // 'department_id', // Uncomment or add others if you have them
     ];
 
