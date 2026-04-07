@@ -30,7 +30,7 @@ WORKDIR /var/www/html
 COPY . .
 
 # Install dependencies
-RUN composer install --no-dev --optimize-autoloader
+RUN composer install --no-dev --optimize-autoloader --ignore-platform-reqs
 
 # Set permissions for Laravel
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
