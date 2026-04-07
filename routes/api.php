@@ -60,7 +60,7 @@ Route::get('/run-migration', function () {
 Route::get('/create-admin', function () {
     try {
         // We use your USTP email here so the login matches your identity
-        $adminEmail = 'khenjoshua.verson@1.ustp.edu.ph';
+        $adminEmail = 'testadmin123@gmail.com';
         $adminPassword = 'admin123'; 
 
         // Check if this specific user already exists
