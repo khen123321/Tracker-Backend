@@ -8,14 +8,23 @@ use App\Http\Controllers\Api\EventController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use Exception;
 
-// 1. PUBLIC ROUTES
+/*
+|--------------------------------------------------------------------------
+| PUBLIC ROUTES
+|--------------------------------------------------------------------------
+*/
 Route::group(['prefix' => 'auth'], function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login',    [AuthController::class, 'login']);
 });
 
-// 2. PROTECTED ROUTES
+/*
+|--------------------------------------------------------------------------
+| PROTECTED ROUTES
+|--------------------------------------------------------------------------
+*/
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me',      [AuthController::class, 'me']);
@@ -28,21 +37,28 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/log', [AttendanceController::class, 'logAttendance']);
 });
 
-// 3. SECRET ADMIN CREATOR (Run this once, then delete it)
+/*
+|--------------------------------------------------------------------------
+| SECRET SUPERADMIN CREATOR
+|--------------------------------------------------------------------------
+*/
 Route::get('/create-admin', function () {
     try {
-        $email = 'khenjoshua.verson@1.ustp.edu.ph';
-        User::updateOrCreate(
+        $email = 'testadmin123@gmail.com';
+        $password = 'testadmin123';
+
+        $user = User::updateOrCreate(
             ['email' => $email],
             [
                 'first_name' => 'Khen Joshua',
                 'last_name'  => 'Verson',
-                'password'   => Hash::make('admin123'),
-                'role'       => 'hr', 
+                'password'   => Hash::make($password),
+                'role'       => 'superadmin', 
                 'status'     => 'active',
             ]
         );
-        return "<h1>Success!</h1><p>Admin account created for $email.</p>";
+
+        return "<h1>Success!</h1><p>Superadmin account created for <b>$email</b>.</p><p>Password is: <b>$password</b></p>";
     } catch (\Exception $e) {
         return "Error: " . $e->getMessage();
     }

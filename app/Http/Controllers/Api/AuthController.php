@@ -7,30 +7,29 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Exception;
 
 class AuthController extends Controller
 {
-    // --- 1. LOGIN ---
     public function login(Request $request)
     {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required',
-            'role' => 'required|string' // 'hr' or 'intern'
+            'role' => 'required|string' 
         ]);
 
         $user = User::where('email', $request->email)->first();
 
-        // Check if user exists and password matches the APP_KEY hash
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Invalid email or password.'], 401);
         }
 
-        // Role Validation
+        // --- UPDATED ROLE VALIDATION ---
+        // We allow 'superadmin' to log in when the 'hr' toggle is selected
         if ($request->role === 'hr') {
-            // This is why we changed the creator to role 'hr'
-            if ($user->role !== 'hr' && $user->role !== 'hr_intern') {
-                return response()->json(['message' => 'Access denied. This is not an HR account.'], 403);
+            if ($user->role !== 'hr' && $user->role !== 'hr_intern' && $user->role !== 'superadmin') {
+                return response()->json(['message' => 'Access denied. Privileged account required.'], 403);
             }
         } 
         else if ($request->role === 'intern') {
@@ -48,7 +47,7 @@ class AuthController extends Controller
         ]);
     }
 
-    // --- 2. REGISTER ---
+    // ... keep your register, me, and logout methods as they were ...
     public function register(Request $request)
     {
         $request->validate([
@@ -92,7 +91,6 @@ class AuthController extends Controller
         if ($request->user() && $request->user()->currentAccessToken()) {
             $request->user()->tokens()->where('id', $request->user()->currentAccessToken()->id)->delete();
         }
-
         return response()->json(['message' => 'Logged out successfully']);
     }
 }
