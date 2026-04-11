@@ -10,28 +10,36 @@ class UsersSeeder extends Seeder
 {
     public function run(): void
     {
-        // Default system accounts
-        // IMPORTANT: Change these passwords immediately after first login!
-        // HR accounts are pre-created by Admin only — no public sign-up for HR (Section 6.1)
-
         $users = [
+            // --- THE SUPER ADMIN (YOU) ---
             [
-                'last_name'  => 'Administrator',
-                'first_name' => 'System',
-                'middle_name'=> null,
-                'email'      => 'admin@climbs.com.ph',
-                'password'   => Hash::make('Admin@CLIMBS2024!'),
-                'role'       => 'admin',
-                'status'     => 'active', // <-- Changed this from is_active
+                'last_name'   => 'Verson',
+                'first_name'  => 'Khen Joshua',
+                'middle_name' => 'G.',
+                'email'       => 'testadmin123@gmail.com   ',
+                'password'    => Hash::make('testadmin123'), 
+                'role'        => 'superadmin', // Full system access
+                'status'      => 'active',
             ],
+            // --- SYSTEM ADMINISTRATOR ---
             [
-                'last_name'  => 'Staff',
-                'first_name' => 'HR',
-                'middle_name'=> null,
-                'email'      => 'hr@climbs.com.ph',
-                'password'   => Hash::make('HR@CLIMBS2024!'),
-                'role'       => 'hr',
-                'status'     => 'active', // <-- Changed this from is_active
+                'last_name'   => 'Administrator',
+                'first_name'  => 'System',
+                'middle_name' => null,
+                'email'       => 'admin@climbs.com.ph',
+                'password'    => Hash::make('Admin@CLIMBS2024!'),
+                'role'        => 'admin',
+                'status'      => 'active',
+            ],
+            // --- HR STAFF ---
+            [
+                'last_name'   => 'Staff',
+                'first_name'  => 'HR',
+                'middle_name' => null,
+                'email'       => 'hr@climbs.com.ph',
+                'password'    => Hash::make('HR@CLIMBS2024!'),
+                'role'        => 'hr',
+                'status'      => 'active',
             ],
         ];
 
@@ -39,8 +47,8 @@ class UsersSeeder extends Seeder
             DB::table('users')->updateOrInsert(
                 ['email' => $user['email']],
                 array_merge($user, [
-                    'created_at'    => now(),
-                    'updated_at'    => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ])
             );
         }

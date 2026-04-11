@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\Intern; // 👈 Added Intern Model
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Exception;
@@ -25,8 +26,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid email or password.'], 401);
         }
 
-        // --- UPDATED ROLE VALIDATION ---
-        // We allow 'superadmin' to log in when the 'hr' toggle is selected
+        // --- ROLE VALIDATION ---
         if ($request->role === 'hr') {
             if ($user->role !== 'hr' && $user->role !== 'hr_intern' && $user->role !== 'superadmin') {
                 return response()->json(['message' => 'Access denied. Privileged account required.'], 403);
@@ -47,7 +47,6 @@ class AuthController extends Controller
         ]);
     }
 
-    // ... keep your register, me, and logout methods as they were ...
     public function register(Request $request)
     {
         $request->validate([
@@ -55,8 +54,10 @@ class AuthController extends Controller
             'last_name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
+            'course_program' => 'required|string', // 👈 Ensure course is required
         ]);
 
+        // 1. Create the base User account
         $user = User::create([
             'first_name' => $request->first_name,
             'middle_name' => $request->middle_name,
@@ -70,6 +71,16 @@ class AuthController extends Controller
             'assigned_branch' => $request->assigned_branch,
             'assigned_department' => $request->assigned_department,
             'date_started' => $request->date_started,
+        ]);
+
+        // 2. ✨ Create the Intern Profile for the Graph & Attendance ✨
+        // We map the course_program from the form directly into the course column
+        Intern::create([
+            'user_id' => $user->id,
+            'course' => $request->course_program, 
+            'school_id' => 1, // You can make these dynamic later if you have tables for them
+            'branch_id' => 1,
+            'department_id' => 1,
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
