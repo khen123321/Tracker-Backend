@@ -97,4 +97,55 @@ class HrController extends Controller
 
         return response()->json(['message' => 'User updated successfully!', 'user' => $user]);
     }
+
+    /* =========================================================
+       === NEW METHODS FOR THE ROLE & ACCESS MANAGEMENT UI === 
+       ========================================================= */
+
+    /**
+     * Get users specifically formatted for the React Role Management table
+     */
+    public function getRoleUsers()
+    {
+        // Fetch users who are staff (adjust role names as needed based on your DB)
+        $users = User::whereIn('role', ['hr', 'hr_intern', 'superadmin'])
+            ->select('id', 'first_name', 'last_name', 'email', 'role', 'permissions', 'assigned_department')
+            ->get();
+            
+        // Transform the data so React can read it perfectly
+        $users->transform(function ($user) {
+            $user->name = $user->first_name . ' ' . $user->last_name;
+            $user->department = $user->assigned_department ?? 'HR Department';
+            
+            if (!$user->permissions) {
+                $user->permissions = [];
+            }
+            return $user;
+        });
+
+        return response()->json($users);
+    }
+
+    /**
+     * Update the page permissions array and role from the React Modal
+     */
+    public function updateUserAccess(Request $request, $id)
+    {
+        $user = User::findOrFail($id);
+
+        // Security check: Don't let anyone downgrade the master Superadmin account
+        if ($user->role === 'superadmin' && $request->role !== 'superadmin') {
+            return response()->json(['message' => 'Cannot modify the main Superadmin account.'], 403);
+        }
+
+        $user->update([
+            'role' => $request->role ?? $user->role,
+            'permissions' => $request->permissions ?? [],
+        ]);
+
+        return response()->json([
+            'message' => 'Access updated successfully!',
+            'user' => $user
+        ]);
+    }
 }

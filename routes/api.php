@@ -60,7 +60,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/hr/all-users',  [HrController::class, 'getAllUsers']);
     Route::post('/hr/sub-users', [HrController::class, 'storeSubUser']);
     Route::post('/hr/update-permissions/{id}', [HrController::class, 'updatePermissions']);
-    
+    Route::get('/hr/users-roles', [HrController::class, 'getRoleUsers']);
+Route::put('/hr/users-roles/{id}', [HrController::class, 'updateUserAccess']);
+Route::post('/hr/users', [HrController::class, 'storeSubUser']);
     // --- Events ---
     Route::get('/events',   [EventController::class, 'index']);
     Route::post('/events',  [EventController::class, 'store']);

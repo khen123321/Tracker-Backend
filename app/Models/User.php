@@ -13,7 +13,6 @@ class User extends Authenticatable
 
     /**
      * The attributes that are mass assignable.
-     * Added 'permissions' to allow the Super Admin to save access keys.
      */
     protected $fillable = [
         'first_name', 
@@ -37,8 +36,8 @@ class User extends Authenticatable
         'has_endorsement', 
         'has_pledge', 
         'has_nda',
-        'school',  // <--- ADD THIS
-        'course'
+        'school',
+        'course',
     ];
 
     /**
