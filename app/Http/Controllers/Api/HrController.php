@@ -19,7 +19,8 @@ class HrController extends Controller
         $today = Carbon::today()->toDateString();
 
         $interns = User::where('role', 'intern')
-            ->with(['attendance_logs' => function($query) use ($today) {
+            // 👇 THIS IS THE FIX: Added 'intern' to the array! 👇
+            ->with(['intern', 'attendance_logs' => function($query) use ($today) {
                 $query->whereDate('date', $today);
             }])
             ->get();
@@ -146,6 +147,60 @@ class HrController extends Controller
         return response()->json([
             'message' => 'Access updated successfully!',
             'user' => $user
+        ]);
+    }
+
+    /* =========================================================
+       === INTERN MANAGEMENT (ASSIGNMENTS & REQUIREMENTS) === 
+       ========================================================= */
+
+    /**
+     * Get all regular interns for the management table
+     */
+    public function getInternsForManagement()
+    {
+        $interns = User::where('role', 'intern')
+            ->select(
+                'id', 'first_name', 'last_name', 'email', 'school', 'course', 
+                'assigned_branch', 'assigned_department', 'status',
+                'has_moa', 'has_endorsement', 'has_pledge', 'has_nda'
+            )
+            ->get();
+            
+        // Format the name for React
+        $interns->transform(function ($intern) {
+            $intern->name = $intern->first_name . ' ' . $intern->last_name;
+            return $intern;
+        });
+
+        return response()->json($interns);
+    }
+
+    /**
+     * Save the branch, department, and paperwork checklist
+     */
+    public function updateInternAssignment(Request $request, $id)
+    {
+        $intern = User::findOrFail($id);
+
+        // Security check: Make sure we are only editing actual interns
+        if ($intern->role !== 'intern') {
+            return response()->json(['message' => 'You can only assign branches to Interns.'], 403);
+        }
+
+        $intern->update([
+            'assigned_branch' => $request->assigned_branch,
+            'assigned_department' => $request->assigned_department,
+            'status' => $request->status,
+            'has_moa' => $request->has_moa,
+            'has_endorsement' => $request->has_endorsement,
+            'has_pledge' => $request->has_pledge,
+            'has_nda' => $request->has_nda,
+        ]);
+
+        return response()->json([
+            'message' => 'Intern assignment updated successfully!',
+            'intern' => $intern
         ]);
     }
 }

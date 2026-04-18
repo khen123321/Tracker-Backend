@@ -4,6 +4,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\School;               // 👈 IMPORT ADDED FOR PUBLIC ROUTES
+use App\Models\RequirementSetting;   // 👈 IMPORT ADDED FOR PUBLIC ROUTES
 
 // Include ALL Controllers
 use App\Http\Controllers\Api\AuthController;
@@ -13,6 +15,7 @@ use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\InternDashboardController;
 use App\Http\Controllers\Api\FormRequestController;
 use App\Http\Controllers\HR\DashboardController;
+use App\Http\Controllers\Api\SettingsController;
 use Exception;
 
 /*
@@ -31,6 +34,22 @@ Route::group(['prefix' => 'auth'], function () {
 
 // HR Public Stats
 Route::get('/hr/dashboard-stats', [DashboardController::class, 'getStats']);
+
+// 👇 NEW: PUBLIC ROUTES FOR SIGN-UP PAGE DROPDOWNS 👇
+Route::get('/public/schools', function() {
+    // Return all schools in alphabetical order
+    return response()->json(School::orderBy('name', 'asc')->get());
+});
+
+Route::get('/public/courses/{school_id}', function($school_id) {
+    // Return only the distinct courses that this specific school offers based on HR settings
+    $courses = RequirementSetting::where('school_id', $school_id)
+                    ->select('course_name')
+                    ->distinct()
+                    ->get();
+    return response()->json($courses);
+});
+
 
 // ==========================================
 // Protected Routes (Requires Login Token)
@@ -61,16 +80,28 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/hr/sub-users', [HrController::class, 'storeSubUser']);
     Route::post('/hr/update-permissions/{id}', [HrController::class, 'updatePermissions']);
     Route::get('/hr/users-roles', [HrController::class, 'getRoleUsers']);
-Route::put('/hr/users-roles/{id}', [HrController::class, 'updateUserAccess']);
-Route::post('/hr/users', [HrController::class, 'storeSubUser']);
+    Route::put('/hr/users-roles/{id}', [HrController::class, 'updateUserAccess']);
+    Route::post('/hr/users', [HrController::class, 'storeSubUser']);
+    
     // --- Events ---
     Route::get('/events',   [EventController::class, 'index']);
     Route::post('/events',  [EventController::class, 'store']);
+    Route::get('/hr/interns/{id}/attendance', [AttendanceController::class, 'getInternAttendance']);
+    Route::get('/hr/interns/{id}/attendance', [App\Http\Controllers\Api\AttendanceController::class, 'getInternAttendanceForHR']);
+    Route::get('/hr/attendance/verification', [App\Http\Controllers\Api\AttendanceController::class, 'getVerificationLogs']);
+    Route::post('/hr/attendance/{id}/verify', [App\Http\Controllers\Api\AttendanceController::class, 'verifyLog']);
     
     // --- Intern Dashboard & Forms ---
     Route::get('/intern/dashboard-stats', [InternDashboardController::class, 'getStats']);
     Route::post('/intern/forms/submit',   [FormRequestController::class, 'store']);
     Route::get('/event-filters', [EventController::class, 'getFilters']);
+
+    // --- HR Settings Routes ---
+    Route::get('/hr/settings/requirements', [SettingsController::class, 'getRequirements']);
+    Route::post('/hr/settings/requirements', [SettingsController::class, 'storeRequirement']);
+    Route::delete('/hr/settings/requirements/{id}', [SettingsController::class, 'deleteRequirement']);
+    Route::get('/hr/settings/schools', [SettingsController::class, 'getSchools']);
+
 });
 
 // ==========================================

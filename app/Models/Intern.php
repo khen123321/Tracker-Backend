@@ -9,10 +9,6 @@ class Intern extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     * Every column from your interns table MUST be listed here.
-     */
     protected $fillable = [
         'user_id',
         'school_id',
@@ -31,41 +27,37 @@ class Intern extends Model
         'id_card_status',
         'certificate_status',
         'status',
+        'emergency_name',
+        'emergency_number',
+        'emergency_address',
     ];
-
-    // ==========================================
-    // RELATIONSHIPS
-    // ==========================================
 
     /**
      * Link back to the main User account
      */
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
-    /**
-     * Link to the Schools table
-     */
     public function school()
     {
-        return $this->belongsTo(School::class); // Make sure you have a School model!
+        return $this->belongsTo(School::class);
     }
 
-    /**
-     * Link to the Branches table
-     */
     public function branch()
     {
-        return $this->belongsTo(Branch::class); // Make sure you have a Branch model!
+        return $this->belongsTo(Branch::class);
     }
 
-    /**
-     * Link to the Departments table
-     */
     public function department()
     {
-        return $this->belongsTo(Department::class); // Make sure you have a Department model!
+        return $this->belongsTo(Department::class);
+    }
+
+    // This allows $intern->attendance_logs
+    public function attendance_logs()
+    {
+        return $this->hasMany(AttendanceLog::class);
     }
 }

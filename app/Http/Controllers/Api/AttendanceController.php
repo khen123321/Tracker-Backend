@@ -36,15 +36,11 @@ class AttendanceController extends Controller
                 ->map(function($log) {
                     return [
                         'id' => $log->id,
-                        // Formats "2026-04-12" to "April 12, 2026"
                         'formatted_date' => $log->date ? Carbon::parse($log->date)->format('F j, Y') : 'N/A',
-                        
-                        // Map the 4 DTR columns
                         'time_in_am'  => $log->time_in ? Carbon::parse($log->time_in)->format('g:i A') : '-',
                         'time_out_am' => $log->lunch_out ? Carbon::parse($log->lunch_out)->format('g:i A') : '-',
                         'time_in_pm'  => $log->lunch_in ? Carbon::parse($log->lunch_in)->format('g:i A') : '-',
                         'time_out_pm' => $log->time_out ? Carbon::parse($log->time_out)->format('g:i A') : '-',
-                        
                         'hours_rendered' => $log->hours_rendered ?? 0,
                         'status' => Str::title($log->status ?? 'pending'),
                     ];
@@ -154,5 +150,134 @@ class AttendanceController extends Controller
              sin($dLon / 2) * sin($dLon / 2);
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
         return round($earthRadius * $c);
+    }
+
+    /**
+     * 4. GET HR INTERN ATTENDANCE MODAL DATA
+     */
+    public function getInternAttendanceForHR($id)
+    {
+        $intern = Intern::where('user_id', $id)->first();
+
+        if (!$intern) {
+            return response()->json([
+                'logs' => [],
+                'stats' => ['hours' => 0, 'days' => 0, 'avgIn' => '--:--', 'rate' => '0%']
+            ], 200);
+        }
+
+        $logs = AttendanceLog::where('intern_id', $intern->id)
+            ->orderBy('date', 'desc')
+            ->get();
+
+        $totalHours = $logs->sum('hours_rendered');
+        $daysPresent = $logs->count();
+        
+        $avgIn = '--:--';
+        $timeInLogs = $logs->filter(function($log) { return !is_null($log->time_in); });
+        
+        if ($timeInLogs->count() > 0) {
+            $totalMinutes = 0;
+            foreach ($timeInLogs as $log) {
+                $time = Carbon::parse($log->time_in);
+                $totalMinutes += ($time->hour * 60) + $time->minute;
+            }
+            $avgMinutes = $totalMinutes / $timeInLogs->count();
+            $avgIn = Carbon::today()->addMinutes($avgMinutes)->format('h:i A');
+        }
+
+        $completionRate = round(($totalHours / 486) * 100, 1);
+
+        return response()->json([
+            'logs' => $logs->map(function($log) {
+                return [
+                    'id' => $log->id,
+                    'date' => Carbon::parse($log->date)->format('F j, Y'),
+                    'am_in' => $log->time_in ? Carbon::parse($log->time_in)->format('H:i:s') : null,
+                    'am_out' => $log->lunch_out ? Carbon::parse($log->lunch_out)->format('H:i:s') : null,
+                    'pm_in' => $log->lunch_in ? Carbon::parse($log->lunch_in)->format('H:i:s') : null,
+                    'pm_out' => $log->time_out ? Carbon::parse($log->time_out)->format('H:i:s') : null,
+                    'total_hours' => $log->hours_rendered ?? 0,
+                    'status' => Str::title($log->status ?? 'Present')
+                ];
+            }),
+            'stats' => [
+                'hours' => round($totalHours, 2),
+                'days' => $daysPresent,
+                'avgIn' => $avgIn,
+                'rate' => $completionRate . '%'
+            ]
+        ], 200);
+    }
+
+    /**
+     * 5. GET CAMERA VERIFICATION LOGS (HR)
+     * (Currently ignoring filters to pull ALL selfies for debugging)
+     */
+    public function getVerificationLogs(Request $request) 
+    {
+        $query = AttendanceLog::with('intern.user')
+            ->where(function($q) {
+                $q->whereNotNull('image_in')->orWhereNotNull('image_out');
+            });
+
+        $logs = $query->get()->map(function($log) {
+            $status = 'verified';
+            if (($log->image_in && $log->time_in_selfie_approved === null) || 
+                ($log->image_out && $log->time_out_selfie_approved === null)) {
+                $status = 'pending_review';
+            }
+
+            $firstName = $log->intern && $log->intern->user ? $log->intern->user->first_name : 'Unknown';
+            $lastName = $log->intern && $log->intern->user ? $log->intern->user->last_name : 'Intern';
+
+            return [
+                'id' => $log->id,
+                'intern_name' => $firstName . ' ' . $lastName,
+                'department' => $log->intern->assigned_department ?? 'N/A', 
+                'date' => $log->date,
+                'time_in' => $log->time_in ? Carbon::parse($log->time_in)->format('h:i A') : null,
+                'time_out' => $log->time_out ? Carbon::parse($log->time_out)->format('h:i A') : null,
+                'image_in' => $log->image_in,
+                'image_out' => $log->image_out,
+                'is_flagged' => $log->is_flagged,
+                'flag_reason' => $log->notes ?? 'Location mismatch or system flag',
+                'status' => $status
+            ];
+        });
+
+        return response()->json($logs);
+    }
+
+    /**
+     * 6. APPROVE/REJECT SELFIE LOG (HR)
+     */
+    public function verifyLog(Request $request, $id) 
+    {
+        $request->validate([
+            'action' => 'required|in:approve,reject'
+        ]);
+
+        $log = AttendanceLog::findOrFail($id);
+
+        if ($request->action === 'approve') {
+            if ($log->image_in) $log->time_in_selfie_approved = 1;
+            if ($log->image_out) $log->time_out_selfie_approved = 1;
+            
+            $log->is_flagged = 0; 
+            $log->save();
+
+            return response()->json(['message' => 'Attendance verified successfully']);
+        } 
+        
+        if ($request->action === 'reject') {
+            if ($log->image_in) $log->time_in_selfie_approved = 0;
+            if ($log->image_out) $log->time_out_selfie_approved = 0;
+            
+            $log->status = 'invalid'; 
+            $log->save();
+
+            return response()->json(['message' => 'Attendance rejected']);
+        }
     }
 }
