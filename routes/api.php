@@ -16,6 +16,10 @@ use App\Http\Controllers\Api\InternDashboardController;
 use App\Http\Controllers\Api\FormRequestController;
 use App\Http\Controllers\HR\DashboardController;
 use App\Http\Controllers\Api\SettingsController;
+
+// ✨ THE MISSING IMPORT ✨
+use App\Http\Controllers\Api\InternController;
+
 use Exception;
 
 /*
@@ -101,6 +105,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/hr/settings/requirements', [SettingsController::class, 'storeRequirement']);
     Route::delete('/hr/settings/requirements/{id}', [SettingsController::class, 'deleteRequirement']);
     Route::get('/hr/settings/schools', [SettingsController::class, 'getSchools']);
+
+    // ✨ THE PROFILE ROUTE ✨
+    Route::get('/hr/interns/{id}', [InternController::class, 'show']);
+    
+    // Bulk Actions
+    Route::post('/hr/interns/bulk-remove', [App\Http\Controllers\Api\HrController::class, 'bulkRemove']);
+    Route::post('/hr/interns/bulk-export', [App\Http\Controllers\Api\HrController::class, 'bulkExport']);
+    Route::post('/hr/interns/bulk-add-hours', [App\Http\Controllers\Api\HrController::class, 'bulkAddHours']);
 
 });
 

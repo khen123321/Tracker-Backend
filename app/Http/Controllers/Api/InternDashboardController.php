@@ -12,31 +12,27 @@ class InternDashboardController extends Controller
 {
     public function getStats(Request $request)
     {
-        // Force Philippine Timezone for accurate daily/weekly math
         date_default_timezone_set('Asia/Manila');
-        
         $user = $request->user();
+        
+        // 1. Get the Intern profile (Removed the with('course') since it doesn't exist)
         $intern = Intern::where('user_id', $user->id)->first();
 
         if (!$intern) {
             return response()->json(['message' => 'Intern profile not found'], 404);
         }
 
-        // Setup Dates
         $today = Carbon::today()->toDateString();
         $startOfWeek = Carbon::now()->startOfWeek()->toDateString();
         $endOfWeek = Carbon::now()->endOfWeek()->toDateString();
 
-        // ==========================================
-        // 1. OJT PROGRESS (Accuracy: 486 Hours)
-        // ==========================================
-        $requiredHours = 486; 
-        $totalHoursRendered = AttendanceLog::where('intern_id', $intern->id)->sum('hours_rendered') ?? 0;
+        // 2. THE CRITICAL SUM (Uses $intern->id to perfectly match the attendance_logs table)
+        $totalSavedHours = AttendanceLog::where('intern_id', $intern->id)->sum('hours_rendered') ?? 0;
 
-        // ==========================================
-        // 2. TODAY'S STATUS (Accuracy: Live Tracking)
-        // ==========================================
-        $todayLog = AttendanceLog::where('intern_id', $intern->id)->whereDate('date', $today)->first();
+        // 3. TODAY'S LOG & LIVE TRACKING
+        $todayLog = AttendanceLog::where('intern_id', $intern->id)
+            ->whereDate('date', $today)
+            ->first();
         
         $todayStatus = 'Not Timed In';
         $todayClockIn = '--:--';
@@ -46,7 +42,6 @@ class InternDashboardController extends Controller
             $todayStatus = $todayLog->status ?? 'Timed In';
             $todayClockIn = $todayLog->time_in ? Carbon::parse($todayLog->time_in)->format('h:i A') : '--:--';
                 
-            // ✨ LIVE CALCULATION: If they haven't timed out, calculate hours from time_in to NOW
             if ($todayLog->time_in && !$todayLog->time_out) {
                 $startTime = Carbon::parse($todayLog->time_in);
                 $todayHours = round(Carbon::now()->diffInMinutes($startTime) / 60, 1);
@@ -55,39 +50,42 @@ class InternDashboardController extends Controller
             }
         }
 
-        // ==========================================
-        // 3. THIS WEEK SUMMARY (Accuracy: Include Incomplete)
-        // ==========================================
+        // 4. CALCULATE FINAL TOTAL
+        $isCurrentlyClockedIn = ($todayLog && $todayLog->time_in && !$todayLog->time_out);
+        $actualProgressTotal = $totalSavedHours + ($isCurrentlyClockedIn ? $todayHours : 0);
+
+        // 5. WEEKLY SUMMARY
         $weekLogs = AttendanceLog::where('intern_id', $intern->id)
             ->whereBetween('date', [$startOfWeek, $endOfWeek])
             ->get();
 
-        $weekDaysPresent = $weekLogs->filter(function($log) {
-            $status = strtolower(trim($log->status));
-            // Count today even if it's still 'incomplete'
-            return in_array($status, ['present', 'late', 'incomplete']);
-        })->count();
+        $weekDaysPresent = $weekLogs->count(); 
+        $weekHoursRendered = $weekLogs->sum('hours_rendered') + ($isCurrentlyClockedIn ? $todayHours : 0);
 
-        // Add today's live hours to the weekly total rendered
-        $weekHoursRendered = round($weekLogs->sum('hours_rendered') + ($todayLog && !$todayLog->time_out ? $todayHours : 0), 1);
-
-        // Est. Completion Date Math
-        $remainingHours = max(0, $requiredHours - ($totalHoursRendered + ($todayLog && !$todayLog->time_out ? $todayHours : 0)));
-        $daysLeft = ceil($remainingHours / 8); 
-        $completionDate = ($totalHoursRendered + $todayHours) > 0 
-            ? Carbon::now()->addWeekdays($daysLeft)->format('M. d, Y') 
-            : 'TBD';
+        // 6. PROGRESS & COMPLETION
+        // 👇 The FIX: Uses your actual database column -> required_hours 👇
+        $requiredHours = $intern->required_hours ?? 0;
+        
+        if ($requiredHours > 0) {
+            $remainingHours = max(0, $requiredHours - $actualProgressTotal);
+            $daysLeft = ceil($remainingHours / 8); 
+            $completionDate = ($actualProgressTotal > 0) 
+                ? Carbon::now()->addWeekdays($daysLeft)->format('M. d, Y') 
+                : 'TBD';
+        } else {
+            $completionDate = 'No hours required';
+        }
 
         return response()->json([
-            'totalHoursRequired' => $requiredHours,
-            'hoursRendered'      => round($totalHoursRendered, 1),
+            'totalHoursRequired' => (float)$requiredHours,
+            'hoursRendered'      => (float)round($actualProgressTotal, 1),
             'completionDate'     => $completionDate,
             'todayStatus'        => $todayStatus,
             'todayClockIn'       => $todayClockIn,
             'todayOfficial'      => '08:15 AM', 
-            'todayHours'         => $todayHours,
+            'todayHours'         => (float)$todayHours,
             'weekDaysPresent'    => $weekDaysPresent,
-            'weekHoursRendered'  => $weekHoursRendered,
+            'weekHoursRendered'  => (float)round($weekHoursRendered, 1),
         ], 200);
     }
 }

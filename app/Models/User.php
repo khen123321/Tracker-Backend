@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\HasApiTokens; // 👈 Crucial for your API login!
 
 class User extends Authenticatable
 {
@@ -15,74 +16,62 @@ class User extends Authenticatable
      * The attributes that are mass assignable.
      */
     protected $fillable = [
-        'first_name', 
-        'middle_name', 
-        'last_name', 
-        'email', 
-        'password', 
-        'role', 
-        'status',
-        'permissions', // <--- IMPORTANT: Added for RBAC
-        'emergency_contact_name', 
-        'emergency_contact_phone', 
-        'emergency_contact_address', 
-        'emergency_relationship',
-        'course_program', 
-        'school_university', 
-        'assigned_branch', 
-        'assigned_department', 
-        'date_started',
-        'has_moa', 
-        'has_endorsement', 
-        'has_pledge', 
-        'has_nda',
-        'school',
-        'course',
+        'first_name',
+        'last_name',
+        'email',
+        'password',
+        'role',          // e.g., 'intern', 'hr', 'superadmin'
+        'status',        // e.g., 'active', 'inactive'
+        'school_id',
+        'branch_id',
+        'department_id'
     ];
 
     /**
      * The attributes that should be hidden for serialization.
      */
     protected $hidden = [
-        'password', 
-        'remember_token'
+        'password',
+        'remember_token',
     ];
 
     /**
      * The attributes that should be cast.
-     * This converts the JSON database column into a usable PHP/React array automatically.
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'permissions' => 'array', // <--- IMPORTANT: Turns JSON into a list
-        'has_moa' => 'boolean',
-        'has_endorsement' => 'boolean',
-        'has_pledge' => 'boolean',
-        'has_nda' => 'boolean',
     ];
 
-    /**
-     * Relationship to the Intern profile.
-     */
-    public function intern()
+    // ==========================================
+    // CLIMBS SYSTEM RELATIONSHIPS
+    // ==========================================
+
+    public function school()
     {
-        return $this->hasOne(Intern::class, 'user_id', 'id');
+        return $this->belongsTo(School::class, 'school_id');
     }
 
-    /**
-     * Relationship to Attendance Logs (Bridged through Intern profile).
-     * This allows $user->attendance_logs to work directly.
-     */
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    public function intern()
+    {
+        // If your 'interns' table connects to the user using 'user_id', leave this. 
+        // If it uses 'intern_id', change the second parameter!
+        return $this->hasOne(Intern::class, 'user_id'); 
+    }
+
     public function attendance_logs()
     {
-        return $this->hasManyThrough(
-            \App\Models\AttendanceLog::class, 
-            \App\Models\Intern::class,
-            'user_id',    // Foreign key on the interns table
-            'intern_id',  // Foreign key on the attendance_logs table
-            'id',         // Local key on the users table
-            'id'          // Local key on the interns table
-        );
+        // ✨ THE FIX: We tell Laravel specifically to look for 'intern_id' instead of 'user_id'
+        return $this->hasMany(AttendanceLog::class, 'intern_id');
     }
 }
