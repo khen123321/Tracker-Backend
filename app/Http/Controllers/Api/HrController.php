@@ -22,11 +22,15 @@ class HrController extends Controller
         $today = Carbon::today()->toDateString();
 
         $interns = User::where('role', 'intern')
-            ->with(['intern', 'attendance_logs' => function($query) use ($today) {
-                $query->whereDate('date', $today);
-            }])
-            // 👇 THIS IS THE MAGIC LINE FOR THE PROGRESS BAR 👇
-            // It tells Laravel to add up all 'hours_rendered' from the logs and attach it to the user
+            // ✨ We keep the deep eager loading so React gets the full objects
+            ->with([
+                'intern.school', 
+                'intern.department', 
+                'intern.branch', 
+                'attendance_logs' => function($query) use ($today) {
+                    $query->whereDate('date', $today);
+                }
+            ])
             ->withSum('attendance_logs', 'hours_rendered')
             ->get();
 
@@ -153,7 +157,7 @@ class HrController extends Controller
     {
         $interns = User::where('role', 'intern')
             ->with('intern') // Load the intern data to get required_hours
-            ->withSum('attendance_logs', 'hours_rendered') // Added here too just in case!
+            ->withSum('attendance_logs', 'hours_rendered') 
             ->select(
                 'id', 'first_name', 'last_name', 'email', 'status'
             )

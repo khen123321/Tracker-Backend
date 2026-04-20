@@ -6,17 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\AttendanceLog;
 use App\Models\Intern;
+use App\Models\Branch;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class AttendanceController extends Controller
 {
-    // Office Coordinates
-    private $officeLat = 8.5042;
-    private $officeLng = 124.6143;
-    private $radiusInMeters = 5000; // Allowed distance from office (Set high for testing)
-
     /**
      * 1. GET HISTORY (DTR Format for "My Logs" Page)
      */
@@ -57,7 +53,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * 2. LOG ATTENDANCE (Clock In/Out)
+     * 2. LOG ATTENDANCE (Clock In/Out with Dynamic Geofencing)
      */
     public function logAttendance(Request $request)
     {
@@ -69,18 +65,36 @@ class AttendanceController extends Controller
         ]);
 
         $user = $request->user();
-        $intern = Intern::where('user_id', $user->id)->first();
+        
+        // ✨ DYNAMIC FETCH: Get Intern with their Assigned Branch
+        $intern = Intern::with('branch')->where('user_id', $user->id)->first();
 
-        if (!$intern) {
-            return response()->json(['message' => 'Intern profile not found.'], 404);
+        if (!$intern || !$intern->branch) {
+            return response()->json(['message' => 'Intern profile or assigned branch not found.'], 404);
         }
 
-        // Check Distance
-        $distance = $this->calculateDistance($request->lat, $request->lng, $this->officeLat, $this->officeLng);
+        $branch = $intern->branch;
+
+        // 🛑 Check if Branch has coordinates set
+        if (is_null($branch->latitude) || is_null($branch->longitude)) {
+            return response()->json(['message' => 'Branch location not configured by HR.'], 422);
+        }
+
+        // 🛰️ Check Distance against the specific Branch coordinates
+        $distance = $this->calculateDistance(
+            $request->lat, 
+            $request->lng, 
+            $branch->latitude, 
+            $branch->longitude
+        );
         
-        if ($distance > $this->radiusInMeters) {
+        // Use branch-specific radius, or default to 100m if not set
+        $allowedRadius = $branch->radius ?? 100;
+
+        if ($distance > $allowedRadius) {
             return response()->json([
-                'message' => "You are too far from the premises ($distance meters away)."
+                'message' => "Out of bounds! You must be at {$branch->name} to record attendance.",
+                'debug' => "Your distance: " . round($distance) . " meters. Allowed: {$allowedRadius}m."
             ], 403);
         }
 
@@ -102,7 +116,7 @@ class AttendanceController extends Controller
         switch ($request->type) {
             case 'time_in':
                 if ($log->time_in) return response()->json(['message' => 'Already timed in for today.'], 400);
-                $log->time_in = $now->toDateTimeString(); // SQL Safe Datetime
+                $log->time_in = $now->toDateTimeString();
                 $log->status = $now->hour > 8 || ($now->hour == 8 && $now->minute > 15) ? 'late' : 'present';
                 $log->image_in = $imageName;
                 break;
@@ -120,7 +134,7 @@ class AttendanceController extends Controller
                 $log->time_out = $now->toDateTimeString(); 
                 $log->image_out = $imageName;
                 
-                // Calculate hours
+                // Calculate hours (Auto-deduct 1 hour for lunch if over 5 hours worked)
                 $start = Carbon::parse($log->time_in);
                 $end = $now;
                 $totalMinutes = $end->diffInMinutes($start);
@@ -138,7 +152,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * 3. DISTANCE HELPER
+     * 3. DISTANCE HELPER (Haversine Formula)
      */
     private function calculateDistance($lat1, $lon1, $lat2, $lon2)
     {
@@ -186,6 +200,7 @@ class AttendanceController extends Controller
             $avgIn = Carbon::today()->addMinutes($avgMinutes)->format('h:i A');
         }
 
+        // Assuming 486 standard OJT hours
         $completionRate = round(($totalHours / 486) * 100, 1);
 
         return response()->json([
@@ -212,7 +227,6 @@ class AttendanceController extends Controller
 
     /**
      * 5. GET CAMERA VERIFICATION LOGS (HR)
-     * (Currently ignoring filters to pull ALL selfies for debugging)
      */
     public function getVerificationLogs(Request $request) 
     {

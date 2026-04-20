@@ -8,7 +8,7 @@ use App\Models\User;
 use App\Models\Intern;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB; // 👇 MUST IMPORT DB FACADE FOR TRANSACTIONS
+use Illuminate\Support\Facades\DB; 
 
 class AuthController extends Controller
 {
@@ -40,7 +40,7 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // 🛡️ SAFETY NET: Ensure permissions is always an array, never null!
+        // 🛡️ SAFETY NET: Ensure permissions is always an array
         $user->permissions = $user->permissions ?? [];
 
         return response()->json([
@@ -59,11 +59,10 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
 
-        // 👇 Use a Database Transaction. If Intern creation fails, User creation rolls back!
         DB::beginTransaction();
 
         try {
-            // 1. Create the base User account (ONLY COLUMNS THAT EXIST IN `users` TABLE)
+            // 1. Create the base User account
             $user = User::create([
                 'first_name' => $request->first_name,
                 'middle_name' => $request->middle_name,
@@ -75,32 +74,34 @@ class AuthController extends Controller
                 'permissions' => [], 
             ]);
 
-            // 👇 NEW AUTOMATION LOGIC: Auto-fetch required hours based on School and Course 👇
-            $actualCourse = $request->course_program ?? $request->course ?? 'N/A';
-            $actualSchoolId = $request->school_id ?? 1;
+            // 👇 THE FIX: Using `$request->filled()` ensures we catch empty strings ("") from React!
+            // We also check multiple possible variable names just in case the React form uses different keys.
+            $actualSchoolId = $request->filled('school_id') ? $request->school_id : ($request->school ?: 1);
+            $actualDeptId = $request->filled('department_id') ? $request->department_id : ($request->assigned_department ?: 1);
+            $actualBranchId = $request->filled('branch_id') ? $request->branch_id : ($request->assigned_branch ?: 1);
+            $actualCourse = $request->filled('course_program') ? $request->course_program : ($request->course ?: 'N/A');
 
+            // Fetch required hours based on School and Course
             $setting = \App\Models\RequirementSetting::where('school_id', $actualSchoolId)
                         ->where('course_name', $actualCourse)
                         ->first();
 
-            $hoursNeeded = $setting ? $setting->required_hours : 0; // Default to 0 if not found
+            $hoursNeeded = $setting ? $setting->required_hours : 0; 
 
-            // 2. Create the Intern Profile (ALL SPECIFIC INTERN DATA GOES HERE)
+            // 2. Create the Intern Profile
             Intern::create([
                 'user_id' => $user->id,
                 
-                // 👇 ADDED 'N/A' FALLBACKS SO MYSQL DOESN'T CRASH 👇
                 'course' => $actualCourse, 
                 'school' => $request->school_university ?? $request->school ?? 'N/A',
                 
-                // 👇 ADDED DEFAULT '1' FOR IDs SO IT PASSES THE REQUIRED INTEGER CHECK 👇
+                // 👇 Fixed assignment of relationships
                 'school_id' => $actualSchoolId,
-                'branch_id' => $request->branch_id ?? $request->assigned_branch ?? 1,
-                'department_id' => $request->department_id ?? $request->assigned_department ?? 1,
+                'branch_id' => $actualBranchId,
+                'department_id' => $actualDeptId,
                 
-                // 👇 INJECT AUTOMATED HOURS HERE 👇
                 'required_hours' => $hoursNeeded,
-                'rendered_hours' => 0, // Fresh interns always start at 0
+                'rendered_hours' => 0, 
 
                 'date_started' => $request->date_started ?? now(),
 
@@ -109,7 +110,7 @@ class AuthController extends Controller
                 'emergency_address' => $request->emergency_address,
             ]);
 
-            DB::commit(); // Save everything to the database
+            DB::commit();
 
             $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -120,7 +121,7 @@ class AuthController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
-            DB::rollBack(); // Cancel everything if there was an error
+            DB::rollBack(); 
             return response()->json([
                 'message' => 'Registration failed. Check your database columns.',
                 'error' => $e->getMessage()
@@ -130,9 +131,13 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        $user = $request->user();
+        $user = clone $request->user();
         
-        // 🛡️ SAFETY NET HERE TOO
+        // 🛡️ THE GEOFENCING FIX: Eager load the branch data so the Intern Attendance page knows where the intern should be!
+        if ($user->role === 'intern') {
+            $user->load(['intern.branch', 'intern.department', 'intern.school']);
+        }
+        
         $user->permissions = $user->permissions ?? [];
         
         return response()->json($user);
