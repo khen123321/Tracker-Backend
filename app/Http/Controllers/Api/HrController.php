@@ -15,73 +15,180 @@ use Illuminate\Support\Facades\DB;
 class HrController extends Controller
 {
     /**
-     * Get list of interns for the main dashboard (Attendance focus)
+     * DASHBOARD: Get list of interns with unique, synced attendance logs
      */
     public function getInternList(Request $request)
     {
-        $today = Carbon::today()->toDateString();
+        $targetDate = $request->date ? Carbon::parse($request->date)->toDateString() : Carbon::today()->toDateString();
 
+        // 1. Get all interns
         $interns = User::where('role', 'intern')
-            // ✨ We keep the deep eager loading so React gets the full objects
-            ->with([
-                'intern.school', 
-                'intern.department', 
-                'intern.branch', 
-                'attendance_logs' => function($query) use ($today) {
-                    $query->whereDate('date', $today);
-                }
-            ])
-            ->withSum('attendance_logs', 'hours_rendered')
+            ->with(['intern.school', 'intern.department', 'intern.branch'])
             ->get();
+
+        $internIds = $interns->pluck('intern.id')->filter()->toArray();
+
+        // 2. Get today's logs and map them by Intern ID to prevent data duplication
+        $todayLogs = AttendanceLog::whereIn('intern_id', $internIds)
+            ->whereDate('date', $targetDate)
+            ->get()
+            ->keyBy('intern_id');
+
+        // 3. Get total rendered hours for the progress bar
+        $allTimeHours = AttendanceLog::whereIn('intern_id', $internIds)
+            ->selectRaw('intern_id, SUM(hours_rendered) as total_hours')
+            ->groupBy('intern_id')
+            ->pluck('total_hours', 'intern_id');
+
+        // 4. Attach formatted data to each user
+        $interns->transform(function ($user) use ($todayLogs, $allTimeHours) {
+            $internId = $user->intern ? $user->intern->id : null;
+            $userLog = null;
+
+            if ($internId && $todayLogs->has($internId)) {
+                $userLog = clone $todayLogs->get($internId); 
+
+                $formatTime = function($time) {
+                    try {
+                        return $time ? Carbon::parse($time)->format('h:i A') : '-----';
+                    } catch (\Exception $e) {
+                        return $time;
+                    }
+                };
+
+                // Map DB columns to keys expected by the React Main Table
+                $userLog->time_in_am = $formatTime($userLog->time_in);
+                $userLog->time_out_am = $formatTime($userLog->lunch_out);
+                $userLog->time_in_pm = $formatTime($userLog->lunch_in);
+                $userLog->time_out_pm = $formatTime($userLog->time_out);
+            }
+
+            $user->setAttribute('attendance_logs', $userLog ? [$userLog] : []);
+            $user->setAttribute('attendance_logs_sum_hours_rendered', $internId ? ($allTimeHours->get($internId) ?? 0) : 0);
+
+            return $user;
+        });
 
         return response()->json($interns);
     }
 
-    /**
-     * Get Administrative Users (Superadmin, HR & HR Interns)
-     */
-    public function getAllUsers()
-    {
-        $users = User::whereIn('role', ['hr', 'hr_intern', 'superadmin'])
-            ->orderBy('role', 'asc')
-            ->get();
+    /* =========================================================
+       === CAMERA VERIFICATION METHODS === 
+       ========================================================= */
 
-        return response()->json($users);
+    /**
+     * Get logs specifically formatted for the Camera Verification Grid
+     */
+    public function getVerificationLogs(Request $request)
+    {
+        $targetDate = $request->date ? Carbon::parse($request->date)->toDateString() : Carbon::today()->toDateString();
+        $filter = $request->filter ?? 'all';
+
+        $query = AttendanceLog::with('intern')
+            ->whereDate('date', $targetDate);
+
+        $logs = $query->get()->map(function ($log) {
+            $user = User::where('id', $log->intern->user_id)->first();
+
+            return [
+                'id' => $log->id,
+                'intern_name' => $user ? $user->first_name . ' ' . $user->last_name : 'Unknown Intern',
+                'department' => $user->assigned_department ?? 'N/A',
+                'is_flagged' => $log->is_flagged,
+                
+                // ✨ PULL CUSTOM HR REASON FROM THE DATABASE NOTES COLUMN ✨
+                'flag_reason' => $log->notes, 
+                
+                'status' => $log->status,
+                
+                // RAW TIMES
+                'time_in' => $log->time_in,
+                'lunch_out' => $log->lunch_out,
+                'lunch_in' => $log->lunch_in,
+                'time_out' => $log->time_out,
+
+                // 📸 IMAGE MAPPING: These match your database column names exactly
+                'image_in' => $log->image_in ?? $log->time_in_selfie,
+                'lunch_out_selfie' => $log->lunch_out_selfie,
+                'lunch_in_selfie' => $log->lunch_in_selfie,
+                'image_out' => $log->image_out ?? $log->time_out_selfie,
+            ];
+        });
+
+        if ($filter === 'flagged') {
+            $logs = $logs->where('is_flagged', 1)->values();
+        }
+
+        return response()->json($logs);
     }
 
     /**
-     * Create a new HR account
+     * Verify or Reject a specific attendance log
      */
+    public function verifyAttendanceAction(Request $request, $id)
+    {
+        try {
+            $log = AttendanceLog::findOrFail($id);
+            
+            if ($request->action === 'approve') {
+                $log->status = 'present';
+                $log->is_flagged = 0;
+                $log->notes = null;
+            } elseif ($request->action === 'reject') {
+                // 🛑 We STOP changing the 'status' column to avoid the SQL ENUM error
+                $log->is_flagged = 1; 
+                
+                // 📝 We save the reason in 'notes'
+                $log->notes = $request->reason ?? 'Rejected manually by HR Admin.';
+            }
+            
+            $log->save();
+            return response()->json(['message' => 'Attendance flagged as rejected successfully']);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Backend Error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /* =========================================================
+       === ADMINISTRATIVE & BULK METHODS === 
+       ========================================================= */
+
+    public function getAllUsers()
+    {
+        return response()->json(User::whereIn('role', ['hr', 'hr_intern', 'superadmin'])->orderBy('role', 'asc')->get());
+    }
+
     public function storeSubUser(Request $request)
     {
         if (Auth::user()->role !== 'superadmin') {
             return response()->json(['message' => 'Unauthorized. Only Superadmins can create accounts.'], 403);
         }
-
+        
         $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name'  => 'required|string|max:255',
-            'email'      => 'required|email|unique:users,email',
-            'password'   => 'required|min:6',
-            'role'       => 'required|in:hr_intern,hr,superadmin', 
+            'first_name' => 'required|string|max:255', 
+            'last_name' => 'required|string|max:255', 
+            'email' => 'required|email|unique:users,email', 
+            'password' => 'required|min:6', 
+            'role' => 'required|in:hr_intern,hr,superadmin'
         ]);
 
         $user = User::create([
             'first_name' => $validated['first_name'],
-            'last_name'  => $validated['last_name'],
-            'email'      => $validated['email'],
-            'password'   => Hash::make($validated['password']),
-            'role'       => $validated['role'],
-            'status'     => 'active',
+            'last_name' => $validated['last_name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+            'status' => 'active',
             'permissions' => [] 
         ]);
 
         return response()->json(['message' => 'Account created successfully!'], 201);
     }
 
-    /**
-     * Update roles and status for a specific user
-     */
     public function updatePermissions(Request $request, $id)
     {
         if (Auth::user()->role !== 'superadmin') {
@@ -106,9 +213,6 @@ class HrController extends Controller
         return response()->json(['message' => 'User updated successfully!', 'user' => $user]);
     }
 
-    /**
-     * Get users specifically formatted for the React Role Management table
-     */
     public function getRoleUsers()
     {
         $users = User::whereIn('role', ['hr', 'hr_intern', 'superadmin'])
@@ -128,9 +232,6 @@ class HrController extends Controller
         return response()->json($users);
     }
 
-    /**
-     * Update the page permissions array and role from the React Modal
-     */
     public function updateUserAccess(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -150,17 +251,12 @@ class HrController extends Controller
         ]);
     }
 
-    /**
-     * Get all regular interns for the management table
-     */
     public function getInternsForManagement()
     {
         $interns = User::where('role', 'intern')
-            ->with('intern') // Load the intern data to get required_hours
+            ->with('intern') 
             ->withSum('attendance_logs', 'hours_rendered') 
-            ->select(
-                'id', 'first_name', 'last_name', 'email', 'status'
-            )
+            ->select('id', 'first_name', 'last_name', 'email', 'status')
             ->get();
             
         $interns->transform(function ($user) {
@@ -171,9 +267,6 @@ class HrController extends Controller
         return response()->json($interns);
     }
 
-    /**
-     * Save the branch, department, and paperwork checklist
-     */
     public function updateInternAssignment(Request $request, $id)
     {
         $intern = User::findOrFail($id);
@@ -198,10 +291,6 @@ class HrController extends Controller
         ]);
     }
 
-    /* =========================================================
-       === BULK ACTION METHODS (REMOVE, EXPORT, ADD HOURS) === 
-       ========================================================= */
-
     public function bulkRemove(Request $request)
     {
         $request->validate([
@@ -219,6 +308,59 @@ class HrController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => 'Failed to remove interns.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function bulkAddHours(Request $request)
+    {
+        $request->validate([
+            'intern_ids' => 'required|array',
+            'date' => 'required|date',
+            'time_in' => 'required',
+            'time_out' => 'required',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            foreach ($request->intern_ids as $userId) {
+                $intern = Intern::where('user_id', $userId)->first();
+                
+                if ($intern) {
+                    $timeIn = Carbon::parse($request->date . ' ' . $request->time_in);
+                    $timeOut = Carbon::parse($request->date . ' ' . $request->time_out);
+                    
+                    $newHours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+                    $noteAddition = trim(($request->reason ?? '') . ' ' . ($request->notes ?? ''));
+
+                    $existingLog = AttendanceLog::where('intern_id', $intern->id)
+                                                ->where('date', $request->date)
+                                                ->first();
+
+                    if ($existingLog) {
+                        $existingLog->hours_rendered += $newHours;
+                        if ($noteAddition) {
+                            $existingLog->notes = $existingLog->notes ? $existingLog->notes . ' | Add: ' . $noteAddition : 'Add: ' . $noteAddition;
+                        }
+                        $existingLog->save();
+                    } else {
+                        AttendanceLog::create([
+                            'intern_id' => $intern->id,
+                            'date' => $request->date,
+                            'time_in_am' => $timeIn->toDateTimeString(),
+                            'time_out_am' => $timeOut->toDateTimeString(),
+                            'hours_rendered' => $newHours,
+                            'status' => 'Present',
+                            'notes' => $noteAddition ?: null
+                        ]);
+                    }
+                }
+            }
+            
+            DB::commit();
+            return response()->json(['message' => 'Hours added successfully to selected interns.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to add hours.', 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -258,58 +400,5 @@ class HrController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
-    }
-
-    public function bulkAddHours(Request $request)
-    {
-        $request->validate([
-            'intern_ids' => 'required|array',
-            'date' => 'required|date',
-            'time_in' => 'required',
-            'time_out' => 'required',
-        ]);
-
-        DB::beginTransaction();
-        try {
-            foreach ($request->intern_ids as $userId) {
-                $intern = Intern::where('user_id', $userId)->first();
-                
-                if ($intern) {
-                    $timeIn = Carbon::parse($request->date . ' ' . $request->time_in);
-                    $timeOut = Carbon::parse($request->date . ' ' . $request->time_out);
-                    
-                    $newHours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
-                    $noteAddition = trim(($request->reason ?? '') . ' ' . ($request->notes ?? ''));
-
-                    $existingLog = AttendanceLog::where('intern_id', $intern->id)
-                                                ->where('date', $request->date)
-                                                ->first();
-
-                    if ($existingLog) {
-                        $existingLog->hours_rendered += $newHours;
-                        if ($noteAddition) {
-                            $existingLog->notes = $existingLog->notes ? $existingLog->notes . ' | Add: ' . $noteAddition : 'Add: ' . $noteAddition;
-                        }
-                        $existingLog->save();
-                    } else {
-                        AttendanceLog::create([
-                            'intern_id' => $intern->id,
-                            'date' => $request->date,
-                            'time_in' => $timeIn->toDateTimeString(),
-                            'time_out' => $timeOut->toDateTimeString(),
-                            'hours_rendered' => $newHours,
-                            'status' => 'Present',
-                            'notes' => $noteAddition ?: null
-                        ]);
-                    }
-                }
-            }
-            
-            DB::commit();
-            return response()->json(['message' => 'Hours added successfully to selected interns.']);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['message' => 'Failed to add hours.', 'error' => $e->getMessage()], 500);
-        }
     }
 }

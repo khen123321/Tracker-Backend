@@ -66,7 +66,7 @@ class AttendanceController extends Controller
 
         $user = $request->user();
         
-        // ✨ DYNAMIC FETCH: Get Intern with their Assigned Branch
+        // DYNAMIC FETCH: Get Intern with their Assigned Branch
         $intern = Intern::with('branch')->where('user_id', $user->id)->first();
 
         if (!$intern || !$intern->branch) {
@@ -75,12 +75,12 @@ class AttendanceController extends Controller
 
         $branch = $intern->branch;
 
-        // 🛑 Check if Branch has coordinates set
+        // Check if Branch has coordinates set
         if (is_null($branch->latitude) || is_null($branch->longitude)) {
             return response()->json(['message' => 'Branch location not configured by HR.'], 422);
         }
 
-        // 🛰️ Check Distance against the specific Branch coordinates
+        // Check Distance against the specific Branch coordinates
         $distance = $this->calculateDistance(
             $request->lat, 
             $request->lng, 
@@ -123,10 +123,12 @@ class AttendanceController extends Controller
 
             case 'lunch_out':
                 $log->lunch_out = $now->toDateTimeString(); 
+                $log->lunch_out_selfie = $imageName; 
                 break;
 
             case 'lunch_in':
                 $log->lunch_in = $now->toDateTimeString(); 
+                $log->lunch_in_selfie = $imageName; 
                 break;
 
             case 'time_out':
@@ -293,5 +295,36 @@ class AttendanceController extends Controller
 
             return response()->json(['message' => 'Attendance rejected']);
         }
+    }
+
+    /**
+     * 7. GET NOTIFICATIONS (Intern)
+     * Get unread or flagged notifications for the intern
+     */
+    public function getNotifications(Request $request)
+    {
+        $user = $request->user();
+        $intern = Intern::where('user_id', $user->id)->first();
+
+        if (!$intern) return response()->json([]);
+
+        // Fetch logs that are flagged and have a note from HR
+        $notifications = AttendanceLog::where('intern_id', $intern->id)
+            ->where('is_flagged', 1)
+            ->whereNotNull('notes')
+            ->orderBy('date', 'desc')
+            ->get()
+            ->map(function($log) {
+                return [
+                    'id' => $log->id,
+                    'type' => 'rejection',
+                    'title' => 'Attendance Rejected',
+                    'message' => $log->notes,
+                    'date' => Carbon::parse($log->date)->format('M d, Y'),
+                    'created_at' => $log->updated_at->diffForHumans()
+                ];
+            });
+
+        return response()->json($notifications);
     }
 }

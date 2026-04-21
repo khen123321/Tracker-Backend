@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\School;
 use App\Models\Department;
-use App\Models\Branch;               // ✨ Added Import
+use App\Models\Branch;               
 use App\Models\RequirementSetting;
 
 // Include ALL Controllers
@@ -54,9 +54,8 @@ Route::prefix('public')->group(function () {
         return response()->json($courses);
     });
 
-    // ✨ UPDATED: Public Branches Route (Now pulls from DB) ✨
+    // Public Branches Route
     Route::get('/branches', function() {
-        // This removes the hardcoded list and uses the real locations HR sets
         return response()->json(Branch::orderBy('name', 'asc')->get());
     });
 
@@ -90,6 +89,9 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['message' => 'Notifications marked as read']);
     });
 
+    // ✨ THE MISSING ROUTE HAS BEEN ADDED HERE ✨
+    Route::get('/intern/notifications', [AttendanceController::class, 'getNotifications']);
+
     // --- HR Management ---
     Route::get('/hr/interns',    [HrController::class, 'getInternList']);
     Route::get('/hr/all-users',  [HrController::class, 'getAllUsers']);
@@ -99,12 +101,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/hr/users-roles/{id}', [HrController::class, 'updateUserAccess']);
     Route::post('/hr/users', [HrController::class, 'storeSubUser']);
     
-    // --- Events ---
+    // --- Events & Intern Attendance ---
     Route::get('/events',   [EventController::class, 'index']);
     Route::post('/events',  [EventController::class, 'store']);
     Route::get('/hr/interns/{id}/attendance', [AttendanceController::class, 'getInternAttendanceForHR']);
-    Route::get('/hr/attendance/verification', [AttendanceController::class, 'getVerificationLogs']);
-    Route::post('/hr/attendance/{id}/verify', [AttendanceController::class, 'verifyLog']);
+    
+    // Camera Verification Routes
+    Route::get('/hr/attendance/verification', [HrController::class, 'getVerificationLogs']);
+    Route::post('/hr/attendance/{id}/verify', [HrController::class, 'verifyAttendanceAction']);
     
     // --- Intern Dashboard & Forms ---
     Route::get('/intern/dashboard-stats', [InternDashboardController::class, 'getStats']);
@@ -136,7 +140,7 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['message' => 'Deleted successfully']);
     });
 
-    // ✨ NEW: HR Settings (Manage Branches & Geofencing) ✨
+    // --- HR Settings (Manage Branches & Geofencing) ---
     Route::get('/hr/settings/branches', function () {
         return response()->json(Branch::orderBy('name', 'asc')->get());
     });
