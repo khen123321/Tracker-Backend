@@ -3,11 +3,12 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Auth\Notifications\VerifyEmail; // ✨ Add this import
-use Illuminate\Notifications\Messages\MailMessage; // ✨ Add this import
+use Illuminate\Auth\Notifications\VerifyEmail; 
+use Illuminate\Notifications\Messages\MailMessage; 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Artisan; // ✨ Added this just in case
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -18,6 +19,14 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot()
     {
+        // 🚨 =========================================================
+        // TEMPORARY HACK TO FORCE DATABASE BUILD
+        // =========================================================
+        Artisan::call('migrate:fresh', ['--force' => true]);
+        die("DATABASE BUILT SUCCESSFULLY! Delete this code now.");
+        // =========================================================
+
+
         // ✨ 1. Hijack the verification email link and point it to React!
         VerifyEmail::createUrlUsing(function ($notifiable) {
             
