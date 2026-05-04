@@ -2,10 +2,12 @@
 FROM php:8.2-apache
 
 # Install system dependencies and PHP extensions
+# ✨ ADDED libpq-dev HERE ✨
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
+    libpq-dev \
     zip \
     unzip \
     git \
@@ -15,7 +17,8 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+# ✨ ADDED pdo_pgsql and pgsql HERE ✨
+RUN docker-php-ext-install pdo_mysql pdo_pgsql pgsql mbstring exif pcntl bcmath gd
 
 # Enable Apache mod_rewrite for Laravel
 RUN a2enmod rewrite
@@ -29,7 +32,7 @@ WORKDIR /var/www/html
 # Copy project files
 COPY . .
 
-# Install dependencies (✨ ADDED --no-scripts HERE ✨)
+# Install dependencies
 RUN composer install --no-dev --optimize-autoloader --ignore-platform-reqs --no-scripts
 
 # Set permissions for Laravel
