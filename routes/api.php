@@ -265,31 +265,58 @@ Route::get('/test-email', function () {
     }
 });
 
+
 // =====================================================================
-// THE "NUKE & PAVE" DATABASE ROUTE (NOW 100% CRASH-FREE!)
+// 🚀 THE "CLEAN START" DATABASE ROUTE (FIXED: Uses 'migrate' instead of fresh)
 // =====================================================================
 Route::get('/run-secret-migrations-2026', function () {
     try {
-        // We only clear the config. We CANNOT clear the cache here 
-        // because the cache database table doesn't exist yet!
         Artisan::call('config:clear');
 
-        // Build the database and run the seeder
-        Artisan::call('migrate:fresh', [
+        // We use 'migrate' so it creates missing tables without crashing on drops
+        Artisan::call('migrate', [
             '--force' => true,
             '--seed' => true
         ]);
         
         return response()->json([
             'status' => 'success',
-            'message' => 'Database tables built and seeded successfully!',
+            'message' => 'Database tables created and seeded successfully!',
             'output' => Artisan::output()
         ]);
 
     } catch (\Throwable $e) {
         return response()->json([
             'status'  => 'error',
-            'message' => 'CRITICAL ERROR: ' . $e->getMessage()
+            'message' => 'MIGRATION ERROR: ' . $e->getMessage()
         ]);
     }
+});
+
+
+// =====================================================================
+// 🧹 CLEANUP ROUTE: Delete test users (except superadmin)
+// =====================================================================
+Route::get('/cleanup-test-users', function () {
+    $deletedCount = App\Models\User::where('email', '!=', 'testadmin123@gmail.com')->delete();
+    
+    return response()->json([
+        'message' => "Successfully deleted $deletedCount test accounts.",
+        'remaining_admin' => 'testadmin123@gmail.com'
+    ]);
+});
+
+
+// =====================================================================
+// ✅ FORCE VERIFY ROUTE: Instantly activate any test accounts
+// =====================================================================
+Route::get('/force-verify-all', function () {
+    $updated = App\Models\User::whereNull('email_verified_at')->update([
+        'email_verified_at' => now(),
+        'status' => 'active'
+    ]);
+    
+    return response()->json([
+        'message' => "Successfully verified $updated test accounts. You can now log in with them!"
+    ]);
 });
