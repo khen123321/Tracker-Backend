@@ -266,13 +266,15 @@ Route::get('/test-email', function () {
 });
 
 // =====================================================================
-// THE "NUKE & PAVE" DATABASE ROUTE (NOW SESSION-FREE!)
+// THE "NUKE & PAVE" DATABASE ROUTE (NOW 100% CRASH-FREE!)
 // =====================================================================
 Route::get('/run-secret-migrations-2026', function () {
     try {
+        // We only clear the config. We CANNOT clear the cache here 
+        // because the cache database table doesn't exist yet!
         Artisan::call('config:clear');
-        Artisan::call('cache:clear');
 
+        // Build the database and run the seeder
         Artisan::call('migrate:fresh', [
             '--force' => true,
             '--seed' => true
@@ -280,7 +282,7 @@ Route::get('/run-secret-migrations-2026', function () {
         
         return response()->json([
             'status' => 'success',
-            'message' => 'Cache cleared and Postgres tables built successfully!',
+            'message' => 'Database tables built and seeded successfully!',
             'output' => Artisan::output()
         ]);
 
