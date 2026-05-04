@@ -16,8 +16,11 @@ Route::get('/run-secret-migrations-2026', function () {
         Artisan::call('config:clear');
         Artisan::call('cache:clear');
 
-        // 2. Wipe the database and rebuild it perfectly with your updated migration
-        Artisan::call('migrate:fresh', ['--force' => true]);
+        // 2. Wipe the database and rebuild it perfectly WITH THE SEEDER
+        Artisan::call('migrate:fresh', [
+            '--force' => true,
+            '--seed' => true
+        ]);
         
         return response()->json([
             'status' => 'success',
