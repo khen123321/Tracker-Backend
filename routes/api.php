@@ -4,7 +4,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Mail; // ✨ ADDED FOR EMAIL TESTING
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Artisan; // ✨ ADDED FOR SECRET ROUTE
 use App\Models\User;
 use App\Models\School;
 use App\Models\Department;
@@ -261,5 +262,32 @@ Route::get('/test-email', function () {
         return response()->json(['message' => 'Test email sent successfully! Check your inbox.']);
     } catch (\Exception $e) {
         return response()->json(['error' => 'Mail failed to send: ' . $e->getMessage()]);
+    }
+});
+
+// =====================================================================
+// THE "NUKE & PAVE" DATABASE ROUTE (NOW SESSION-FREE!)
+// =====================================================================
+Route::get('/run-secret-migrations-2026', function () {
+    try {
+        Artisan::call('config:clear');
+        Artisan::call('cache:clear');
+
+        Artisan::call('migrate:fresh', [
+            '--force' => true,
+            '--seed' => true
+        ]);
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Cache cleared and Postgres tables built successfully!',
+            'output' => Artisan::output()
+        ]);
+
+    } catch (\Throwable $e) {
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'CRITICAL ERROR: ' . $e->getMessage()
+        ]);
     }
 });
