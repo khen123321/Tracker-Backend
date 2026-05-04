@@ -1,37 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Artisan;
 
+// This is your only web route. It just shows the default Laravel page.
+// We removed the database code from here so it doesn't crash the session!
 Route::get('/', function () {
     return view('welcome');
-});
-
-// =====================================================================
-// THE "NUKE & PAVE" DATABASE ROUTE
-// =====================================================================
-Route::get('/run-secret-migrations-2026', function () {
-    try {
-        // 1. Wipe Laravel's memory so it sees the new PostgreSQL settings
-        Artisan::call('config:clear');
-        Artisan::call('cache:clear');
-
-        // 2. Wipe the database and rebuild it perfectly WITH THE SEEDER
-        Artisan::call('migrate:fresh', [
-            '--force' => true,
-            '--seed' => true
-        ]);
-        
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Cache cleared and Postgres tables built successfully!',
-            'output' => Artisan::output()
-        ]);
-
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status'  => 'error',
-            'message' => 'CRITICAL ERROR: ' . $e->getMessage()
-        ]);
-    }
 });
